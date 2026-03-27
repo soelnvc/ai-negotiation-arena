@@ -1,3 +1,6 @@
+# This is the pre written boilerplate README in "openenv init ..." Ignore this for now
+
+
 ---
 title: Startone Environment Server
 emoji: 📸
