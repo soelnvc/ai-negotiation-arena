@@ -6,11 +6,18 @@
 
 """Startone Environment."""
 
-from .client import StartoneEnv
 from .models import StartoneAction, StartoneObservation
 
-__all__ = [
-    "StartoneAction",
-    "StartoneObservation",
-    "StartoneEnv",
-]
+try:
+    from .client import StartoneEnv
+    __all__ = [
+        "StartoneAction",
+        "StartoneObservation",
+        "StartoneEnv",
+    ]
+except ImportError:
+    # openenv.core not available, but models are still accessible
+    __all__ = [
+        "StartoneAction",
+        "StartoneObservation",
+    ]

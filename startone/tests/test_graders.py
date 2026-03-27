@@ -1,97 +1,97 @@
-from startone.models import ArenaState
-from startone.server.graders import ArenaGraders
+from startone.models import MarketState
+from startone.server.graders import MarketGraders
 
 
-def _base_state() -> ArenaState:
-    return ArenaState(
+def _base_state() -> MarketState:
+    return MarketState(
         episode_id="ep-1",
         step_count=10,
-        agent_resources={"Agent_A": 100, "Agent_B": 100, "Agent_C": 100},
-        agent_personalities={"Agent_A": "Rational", "Agent_B": "Cooperative", "Agent_C": "Aggressive"},
-        reputation_matrix={
-            "Agent_A": {"Agent_B": 0.0, "Agent_C": 0.0},
-            "Agent_B": {"Agent_A": 0.0, "Agent_C": 0.0},
-            "Agent_C": {"Agent_A": 0.0, "Agent_B": 0.0},
+        firm_capital={"Firm_A": 100, "Firm_B": 100, "Firm_C": 100},
+        firm_strategies={"Firm_A": "Rational", "Firm_B": "Cooperative", "Firm_C": "Aggressive"},
+        trust_matrix={
+            "Firm_A": {"Firm_B": 0.0, "Firm_C": 0.0},
+            "Firm_B": {"Firm_A": 0.0, "Firm_C": 0.0},
+            "Firm_C": {"Firm_A": 0.0, "Firm_B": 0.0},
         },
         max_rounds=100,
     )
 
 
-def test_grade_resource_scavenger_uses_survival_and_gain() -> None:
+def test_grade_capital_accumulator_uses_survival_and_gain() -> None:
     state = _base_state()
     state.step_count = 50
-    state.agent_resources["Agent_A"] = 150
+    state.firm_capital["Firm_A"] = 150
 
-    score = ArenaGraders.grade_resource_scavenger(
+    score = MarketGraders.grade_capital_accumulator(
         state,
-        "Agent_A",
-        telemetry={"initial_resources": 100},
+        "Firm_A",
+        telemetry={"initial_capital": 100},
     )
 
     assert score == 1.0
 
 
-def test_grade_resource_scavenger_strict_without_initial_resources() -> None:
+def test_grade_capital_accumulator_strict_without_initial_capital() -> None:
     state = _base_state()
     state.step_count = 50
-    state.agent_resources["Agent_A"] = 150
+    state.firm_capital["Firm_A"] = 150
 
-    score = ArenaGraders.grade_resource_scavenger(state, "Agent_A")
+    score = MarketGraders.grade_capital_accumulator(state, "Firm_A")
 
     assert score == 0.0
 
 
-def test_grade_honest_trader_uses_telemetry_when_present() -> None:
+def test_grade_reliable_partner_uses_telemetry_when_present() -> None:
     state = _base_state()
 
-    score = ArenaGraders.grade_honest_trader(
+    score = MarketGraders.grade_reliable_partner(
         state,
-        "Agent_A",
-        telemetry={"successful_trades": 3, "betrayals_initiated": 0},
+        "Firm_A",
+        telemetry={"successful_contracts": 3, "contracts_breached": 0},
     )
 
     assert score == 1.0
 
 
-def test_grade_honest_trader_fails_if_betrayal_initiated() -> None:
+def test_grade_reliable_partner_fails_if_breach_initiated() -> None:
     state = _base_state()
 
-    score = ArenaGraders.grade_honest_trader(
+    score = MarketGraders.grade_reliable_partner(
         state,
-        "Agent_A",
-        telemetry={"successful_trades": 3, "betrayals_initiated": 1},
+        "Firm_A",
+        telemetry={"successful_contracts": 3, "contracts_breached": 1},
     )
 
     assert score == 0.0
 
 
-def test_grade_diplomat_alias_matches_honest_trader() -> None:
+def test_grade_diplomat_alias_matches_reliable_partner() -> None:
     state = _base_state()
-    telemetry = {"successful_trades": 2, "betrayals_initiated": 0}
+    telemetry = {"successful_contracts": 2, "contracts_breached": 0}
 
-    a = ArenaGraders.grade_honest_trader(state, "Agent_A", telemetry)
-    b = ArenaGraders.grade_diplomat(state, "Agent_A", telemetry)
+    a = MarketGraders.grade_reliable_partner(state, "Firm_A", telemetry)
+    b = MarketGraders.grade_diplomat(state, "Firm_A", telemetry)
 
     assert a == b
 
 
-def test_grade_master_negotiator_telemetry_path() -> None:
+def test_grade_strategic_alliance_master_telemetry_path() -> None:
     state = _base_state()
 
-    score = ArenaGraders.grade_master_negotiator(
+    score = MarketGraders.grade_strategic_alliance_master(
         state,
-        "Agent_A",
-        telemetry={"alliance_streak_steps": 30, "global_decline_ratio": 1.0},
+        "Firm_A",
+        telemetry={"partnership_streak_steps": 30, "market_decline_ratio": 1.0},
     )
 
     assert score == 1.0
 
 
-def test_grade_master_negotiator_fallback_is_clamped() -> None:
+def test_grade_strategic_alliance_master_fallback_is_clamped() -> None:
     state = _base_state()
-    state.reputation_matrix["Agent_A"] = {"Agent_B": -1.0, "Agent_C": -1.0}
+    state.trust_matrix["Firm_A"] = {"Firm_B": -1.0, "Firm_C": -1.0}
 
-    score = ArenaGraders.grade_master_negotiator(state, "Agent_A")
+    score = MarketGraders.grade_strategic_alliance_master(state, "Firm_A")
 
     assert 0.0 <= score <= 1.0
     assert score == 0.0

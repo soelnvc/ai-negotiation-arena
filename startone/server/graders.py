@@ -1,38 +1,38 @@
 """
-Evaluation graders for the AI Negotiation Arena.
+Evaluation graders for the B2B Market Economic Simulation.
 Translates raw environment state and telemetry into normalized 0.0 - 1.0 scores.
 
 Grading Philosophy:
-- Each task measures a specific capability: resource gathering, cooperation, negotiation.
+- Each task measures a specific capability: capital accumulation, cooperation, negotiation.
 - All scores are normalized to [0.0, 1.0], where 1.0 = perfect task execution.
 - Scores are deterministic given state and telemetry (reproducible evaluation).
 
 Telemetry Policy:
-- Task 1 (Resource Scavenger) and Task 2 (Honest Trader) are TELEMETRY-FIRST.
+- Task 1 (Capital Accumulator) and Task 2 (Reliable Partner) are TELEMETRY-FIRST.
   If required telemetry is missing, scores degrade to strict defaults (often 0.0).
   This prevents hidden heuristic assumptions and keeps grading transparent.
-- Task 3 (Master Negotiator) supports TELEMETRY-FIRST scoring with a bounded
-  REPUTATION FALLBACK when telemetry is unavailable (graceful degradation).
+- Task 3 (Strategic Alliance Master) supports TELEMETRY-FIRST scoring with a bounded
+  TRUST FALLBACK when telemetry is unavailable (graceful degradation).
 
 Scoring Targets:
-- Resource Scavenger: 50 steps survival + 50 resource gain (70% survival, 30% wealth).
-- Honest Trader: 3 successful trades with zero betrayals.
-- Master Negotiator: 30-step alliance streak + scarcity resilience (60/40 split).
+- Capital Accumulator: 50 steps survival + 50 capital gain (70% survival, 30% wealth).
+- Reliable Partner: 3 successful contracts with zero breaches.
+- Strategic Alliance Master: 30-step partnership streak + scarcity resilience (60/40 split).
 """
 
 import math
 from typing import Mapping, Optional
-from ..models import ArenaState
+from ..models import MarketState
 
-class ArenaGraders:
+class MarketGraders:
     """Deterministic task graders returning strict scores in the range [0.0, 1.0].
 
     Static methods implement grading logic for 3 difficulty tiers:
-    - grade_resource_scavenger: EASY - Test basic survival and resource gathering.
-    - grade_honest_trader: MEDIUM - Test cooperation without betrayal temptation.
-    - grade_master_negotiator: HARD - Test alliance maintenance under scarcity.
+    - grade_capital_accumulator: EASY - Test basic survival and capital accumulation.
+    - grade_reliable_partner: MEDIUM - Test cooperation without breach temptation.
+    - grade_strategic_alliance_master: HARD - Test partnership maintenance under scarcity.
     
-    All graders take ArenaState (full episode record) and optional telemetry dict,
+    All graders take MarketState (full episode record) and optional telemetry dict,
     returning a normalized score. Scores reflect task progress toward defined targets.
     
     Helper methods:
@@ -40,10 +40,10 @@ class ArenaGraders:
     - _telemetry_value(telemetry, key, default): Safe extraction with graceful fallback.
     
     Telemetry policy:
-    - `grade_resource_scavenger` requires `initial_resources` telemetry.
-    - `grade_honest_trader` expects explicit trade/betrayal telemetry.
-    - `grade_master_negotiator` supports telemetry-first scoring with a bounded
-      reputation fallback when telemetry is unavailable.
+    - `grade_capital_accumulator` requires `initial_capital` telemetry.
+    - `grade_reliable_partner` expects explicit contract/breach telemetry.
+    - `grade_strategic_alliance_master` supports telemetry-first scoring with a bounded
+      trust fallback when telemetry is unavailable.
     """
 
     TARGET_SURVIVAL_STEPS = 50.0
@@ -102,186 +102,212 @@ class ArenaGraders:
             return default
 
     @staticmethod
-    def grade_resource_scavenger(
-        state: ArenaState,
-        player_id: str,
+    def grade_capital_accumulator(
+        state: MarketState,
+        actor_id: str,
         telemetry: Optional[Mapping[str, float]] = None,
     ) -> float:
-        """TASK 1 (EASY): Resource Scavenger - Survive & Gather.
+        """TASK 1 (EASY): Capital Accumulator - Survive & Accumulate.
         
         Objective:
-        Survive for 50 steps without elimination and increase wealth by 50+ resources.
+        Survive for 50 steps without elimination and increase capital by 50+ assets.
         
         Scoring Formula:
         - survival_ratio = min(current_steps / 50, 1.0) [0-50 steps -> 0.0-1.0]
-        - resource_gain = max(0, current_resources - initial_resources)
-        - gain_ratio = min(resource_gain / 50, 1.0) [0-50 gain -> 0.0-1.0]
+        - capital_gain = max(0, current_capital - initial_capital)
+        - gain_ratio = min(capital_gain / 50, 1.0) [0-50 gain -> 0.0-1.0]
         - final_score = (0.70 * survival_ratio) + (0.30 * gain_ratio)
         
         Telemetry Requirement (STRICT):
-        - Requires `initial_resources` telemetry key.
-        - Missing initial_resources -> score = 0.0 (fails hard, no fallback).
+        - Requires `initial_capital` telemetry key.
+        - Missing initial_capital -> score = 0.0 (fails hard, no fallback).
         - This enforces deterministic grading (transparent dependencies).
         
         Args:
-            state: ArenaState with agent_resources and step_count.
-            player_id: Agent ID to grade.
-            telemetry: Optional per-agent telemetry dict with 'initial_resources'.
+            state: MarketState with firm_capital and step_count.
+            actor_id: Firm ID to grade.
+            telemetry: Optional per-firm telemetry dict with 'initial_capital'.
             
         Returns:
             float: Normalized score [0.0, 1.0].
         """
         survival_steps = float(state.step_count)
-        survival_ratio = ArenaGraders._clamp01(
-            survival_steps / ArenaGraders.TARGET_SURVIVAL_STEPS
+        survival_ratio = MarketGraders._clamp01(
+            survival_steps / MarketGraders.TARGET_SURVIVAL_STEPS
         )
 
-        initial_resources = ArenaGraders._telemetry_value(
+        initial_capital = MarketGraders._telemetry_value(
             telemetry,
-            "initial_resources",
+            "initial_capital",
             -1.0,
         )
-        if initial_resources < 0:
+        if initial_capital < 0:
             return 0.0
 
-        current_resources = float(state.agent_resources.get(player_id, 0))
-        resource_gain = max(0.0, current_resources - initial_resources)
-        gain_ratio = ArenaGraders._clamp01(
-            resource_gain / ArenaGraders.TARGET_RESOURCE_GAIN
+        current_capital = float(state.firm_capital.get(actor_id, 0))
+        capital_gain = max(0.0, current_capital - initial_capital)
+        gain_ratio = MarketGraders._clamp01(
+            capital_gain / MarketGraders.TARGET_RESOURCE_GAIN
         )
 
         return (0.7 * survival_ratio) + (0.3 * gain_ratio)
 
     @staticmethod
-    def grade_honest_trader(
-        state: ArenaState,
-        player_id: str,
+    def grade_reliable_partner(
+        state: MarketState,
+        actor_id: str,
         telemetry: Optional[Mapping[str, float]] = None,
     ) -> float:
-        """TASK 2 (MEDIUM): Honest Trader - Cooperate Without Betrayal.
+        """TASK 2 (MEDIUM): Reliable Partner - Cooperate Without Breach.
         
         Objective:
-        Complete 3 successful trades with ZERO betrayals initiated throughout episode.
+        Complete 3 successful contracts with ZERO breaches initiated throughout episode.
         
         Scoring Formula:
-        - successful_trades_ratio = successful_trades / 3.0
-        - If betrayals_initiated > 0: score = 0.0 (instant fail, non-recoverable).
-        - Otherwise: score = min(successful_trades_ratio, 1.0)
+        - successful_contracts_ratio = successful_contracts / 3.0
+        - If contracts_breached > 0: score = 0.0 (instant fail, non-recoverable).
+        - Otherwise: score = min(successful_contracts_ratio, 1.0)
         
         Telemetry Requirement (STRICT):
-        - Requires `successful_trades` and `betrayals_initiated` counters.
-        - Missing/invalid telemetry defaults to 0 trades (fails task).
-        - Single betrayal anywhere in episode -> 0.0 (hard constraint).
+        - Requires `successful_contracts` and `contracts_breached` counters.
+        - Missing/invalid telemetry defaults to 0 contracts (fails task).
+        - Single breach anywhere in episode -> 0.0 (hard constraint).
         
         Semantics:
-        This task tests whether agents can resist short-term temptation (betrayal reward)
-        to achieve long-term cooperative goals. The zero-tolerance betrayal policy
+        This task tests whether firms can resist short-term temptation (breach reward)
+        to achieve long-term cooperative goals. The zero-tolerance breach policy
         mirrors real-world contract violations.
         
         Args:
-            state: ArenaState (unused, kept for API consistency).
-            player_id: Agent ID to grade (unused, kept for API consistency).
-            telemetry: Optional per-agent telemetry dict with trade/betrayal counters.
+            state: MarketState (unused, kept for API consistency).
+            actor_id: Firm ID to grade (unused, kept for API consistency).
+            telemetry: Optional per-firm telemetry dict with contract/breach counters.
             
         Returns:
-            float: Normalized score [0.0, 1.0]. Zero if any betrayal detected.
+            float: Normalized score [0.0, 1.0]. Zero if any breach detected.
         """
-        successful_trades = ArenaGraders._telemetry_value(
+        successful_contracts = MarketGraders._telemetry_value(
             telemetry,
-            "successful_trades",
+            "successful_contracts",
             0.0,
         )
-        betrayals_initiated = ArenaGraders._telemetry_value(
+        contracts_breached = MarketGraders._telemetry_value(
             telemetry,
-            "betrayals_initiated",
+            "contracts_breached",
             0.0,
         )
 
-        if betrayals_initiated > 0:
+        if contracts_breached > 0:
             return 0.0
 
-        return ArenaGraders._clamp01(
-            successful_trades / ArenaGraders.TARGET_SUCCESSFUL_TRADES
+        return MarketGraders._clamp01(
+            successful_contracts / MarketGraders.TARGET_SUCCESSFUL_TRADES
         )
 
     @staticmethod
     def grade_diplomat(
-        state: ArenaState,
-        player_id: str,
+        state: MarketState,
+        actor_id: str,
         telemetry: Optional[Mapping[str, float]] = None,
     ) -> float:
-        """Backward-compatible alias for grade_honest_trader.
+        """Backward-compatible alias for grade_reliable_partner.
         
         Retained for legacy task naming during migration.
-        Delegates directly to grade_honest_trader with same args/returns.
+        Delegates directly to grade_reliable_partner with same args/returns.
         """
-        return ArenaGraders.grade_honest_trader(state, player_id, telemetry)
+        return MarketGraders.grade_reliable_partner(state, actor_id, telemetry)
 
     @staticmethod
-    def grade_master_negotiator(
-        state: ArenaState,
-        player_id: str,
+    def grade_strategic_alliance_master(
+        state: MarketState,
+        actor_id: str,
         telemetry: Optional[Mapping[str, float]] = None,
     ) -> float:
-        """TASK 3 (HARD): Master Negotiator - Alliance Under Pressure.
+        """TASK 3 (HARD): Strategic Alliance Master - Partnership Under Pressure.
         
         Objective:
-        Maintain alliance stability (30+ contiguous ally turns) while the economy
-        deteriorates due to betrayals by other agents.
+        Maintain partnership stability (30+ contiguous partnership turns) while the economy
+        deteriorates due to breaches by other firms.
         
         Scoring Formula (Telemetry-First Path):
-        IF alliance_streak_steps > 0 OR global_decline_ratio > 0:
-            - alliance_score = 0.60 * min(alliance_streak / 30, 1.0)
-            - scarcity_score = 0.40 * decline_ratio
-            - final_score = clamp(alliance_score + scarcity_score, 0.0, 1.0)
+        IF partnership_streak_steps > 0 OR market_decline_ratio > 0:
+            - partnership_score = 0.60 * min(partnership_streak / 30, 1.0)
+            - scarcity_score = 0.40 * market_decline_ratio
+            - final_score = clamp(partnership_score + scarcity_score, 0.0, 1.0)
         
-        Scoring Formula (Reputation Fallback Path):
+        Scoring Formula (Trust Fallback Path):
         ELSE (no telemetry):
-            - avg_reputation = mean(reputation_scores[*])
-            - trust_ratio = (avg_reputation + 1.0) / 2.0  [maps [-1, 1] -> [0, 1]]
+            - avg_trust = mean(trust_scores[*])
+            - trust_ratio = (avg_trust + 1.0) / 2.0  [maps [-1, 1] -> [0, 1]]
             - final_score = 0.60 * clamp(trust_ratio, 0.0, 1.0)
         
         Telemetry Requirement (GRACEFUL):
-        - Prefers `alliance_streak_steps` and `global_decline_ratio`.
-        - If missing, falls back to reputation matrix (bounded trust metric).
-        - Never returns 0.0 unless reputation is catastrophically negative.
+        - Prefers `partnership_streak_steps` and `market_decline_ratio`.
+        - If missing, falls back to trust matrix (bounded trust metric).
+        - Never returns 0.0 unless trust is catastrophically negative.
         
         Semantics:
         This task tests high-level negotiation skills:
-        1. Building alliance partnerships early (alliance_streak).
-        2. Adapting cooperation strategies to scarcity (decline_ratio).
-        3. Using reputation as a strategic signal (fallback path).
+        1. Building partnership alliances early (partnership_streak).
+        2. Adapting cooperation strategies to scarcity (market_decline_ratio).
+        3. Using trust as a strategic signal (fallback path).
         
         Args:
-            state: ArenaState with reputation_matrix and telemetry.
-            player_id: Agent ID to grade.
-            telemetry: Optional per-agent telemetry dict with alliance/decline metrics.
+            state: MarketState with trust_matrix and telemetry.
+            actor_id: Firm ID to grade.
+            telemetry: Optional per-firm telemetry dict with partnership/scarcity metrics.
             
         Returns:
             float: Normalized score [0.0, 1.0].
         """
-        alliance_streak = ArenaGraders._telemetry_value(
+        partnership_streak = MarketGraders._telemetry_value(
             telemetry,
-            "alliance_streak_steps",
+            "partnership_streak_steps",
             0.0,
         )
-        decline_ratio = ArenaGraders._telemetry_value(
+        market_decline_ratio = MarketGraders._telemetry_value(
             telemetry,
-            "global_decline_ratio",
+            "market_decline_ratio",
             0.0,
         )
-        if alliance_streak > 0 or decline_ratio > 0:
-            alliance_score = 0.6 * ArenaGraders._clamp01(
-                alliance_streak / ArenaGraders.TARGET_ALLIANCE_STREAK
+        if partnership_streak > 0 or market_decline_ratio > 0:
+            partnership_score = 0.6 * MarketGraders._clamp01(
+                partnership_streak / MarketGraders.TARGET_ALLIANCE_STREAK
             )
-            scarcity_score = 0.4 * ArenaGraders._clamp01(decline_ratio)
-            return ArenaGraders._clamp01(alliance_score + scarcity_score)
+            scarcity_score = 0.4 * MarketGraders._clamp01(market_decline_ratio)
+            return MarketGraders._clamp01(partnership_score + scarcity_score)
 
-        player_reps = state.reputation_matrix.get(player_id, {})
-        if not player_reps:
+        player_trust = state.trust_matrix.get(actor_id, {})
+        if not player_trust:
             trust_ratio = 0.0
         else:
-            avg_rep = sum(player_reps.values()) / len(player_reps)
-            trust_ratio = ArenaGraders._clamp01((avg_rep + 1.0) / 2.0)
+            avg_trust = sum(player_trust.values()) / len(player_trust)
+            trust_ratio = MarketGraders._clamp01((avg_trust + 1.0) / 2.0)
 
-        return ArenaGraders._clamp01(0.6 * trust_ratio)
+        return MarketGraders._clamp01(0.6 * trust_ratio)
+
+    # Legacy method aliases for backward compatibility
+    @staticmethod
+    def grade_resource_scavenger(state: MarketState, actor_id: str, telemetry: Optional[Mapping[str, float]] = None) -> float:
+        """Backward-compatible alias for grade_capital_accumulator."""
+        return MarketGraders.grade_capital_accumulator(state, actor_id, telemetry)
+
+    @staticmethod
+    def grade_honest_trader(state: MarketState, actor_id: str, telemetry: Optional[Mapping[str, float]] = None) -> float:
+        """Backward-compatible alias for grade_reliable_partner."""
+        return MarketGraders.grade_reliable_partner(state, actor_id, telemetry)
+
+    @staticmethod
+    def grade_master_negotiator(state: MarketState, actor_id: str, telemetry: Optional[Mapping[str, float]] = None) -> float:
+        """Backward-compatible alias for grade_strategic_alliance_master."""
+        return MarketGraders.grade_strategic_alliance_master(state, actor_id, telemetry)
+
+
+# Legacy class alias for backward compatibility
+class ArenaGraders(MarketGraders):
+    """Backward-compatible alias for legacy code using arena terminology.
+    
+    Retained for compatibility during transition from ArenaGraders naming
+    to MarketGraders. Direct subclass with no overrides.
+    """
+    pass

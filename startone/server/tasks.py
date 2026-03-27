@@ -1,14 +1,14 @@
 """
-Task Registry for the AI Negotiation Arena.
+Task Registry for the B2B Market Economic Simulation.
 Binds the environment engine to the specific grading logic for OpenEnv evaluation.
 
 Architecture:
 - Each task wraps an Environment class and a Grader callable.
 - TaskDefinition is either imported from OpenEnv or fallback to local dataclass.
-- ARENA_TASKS list is exported to OpenEnv platform for benchmark registration.
+- MARKET_TASKS list is exported to OpenEnv platform for benchmark registration.
 
 Task Design:
-- All tasks use the same ArenaEnvironment (multiplayer negotiation simulator).
+- All tasks use the same MarketEnvironment (multiplayer market negotiation simulator).
 - Each task differs only in grader_callable and description (goal statement).
 - max_steps=100 is consistent across all tasks (single episode horizon).
 
@@ -51,61 +51,67 @@ if _task_definition_type is None:
 else:
     TaskDefinition = _task_definition_type
 
-from .startone_environment import ArenaEnvironment
-from .graders import ArenaGraders
+from .startone_environment import MarketEnvironment
+from .graders import MarketGraders
 
 # ---------------------------------------------------------
-# TASK 1: EASY - Resource Scavenger
+# TASK 1: EASY - Capital Accumulator
 # ---------------------------------------------------------
-# Measures basic survival and resource gathering capability.
-task_resource_scavenger = TaskDefinition(
-    task_id="arena-resource-scavenger-v1",
-    name="Resource Scavenger",
+# Measures basic survival and capital accumulation capability.
+task_capital_accumulator = TaskDefinition(
+    task_id="market-capital-accumulator-v1",
+    name="Capital Accumulator",
     description=(
-        "Survive for 50 steps and gather as many resources as possible. "
-        "Tests the agent's ability to understand basic environment mechanics."
+        "Survive for 50 steps and accumulate as much capital as possible. "
+        "Tests the firm's ability to understand basic market mechanics."
     ),
-    environment_class=ArenaEnvironment,
-    grader_callable=ArenaGraders.grade_resource_scavenger,
+    environment_class=MarketEnvironment,
+    grader_callable=MarketGraders.grade_capital_accumulator,
     max_steps=100,
 )
 
 # ---------------------------------------------------------
-# TASK 2: MEDIUM - Honest Trader
+# TASK 2: MEDIUM - Reliable Partner
 # ---------------------------------------------------------
-# Measures cooperation under temptation to defect.
-task_honest_trader = TaskDefinition(
-    task_id="arena-honest-trader-v1",
-    name="Honest Trader",
+# Measures cooperation under temptation to breach contracts.
+task_reliable_partner = TaskDefinition(
+    task_id="market-reliable-partner-v1",
+    name="Reliable Partner",
     description=(
-        "Successfully complete 3 trades without ever initiating a betrayal. "
-        "Tests the agent's ability to cooperate and avoid destructive short-term gains."
+        "Successfully complete 3 contracts without ever initiating a breach. "
+        "Tests the firm's ability to cooperate and avoid destructive short-term gains."
     ),
-    environment_class=ArenaEnvironment,
-    grader_callable=ArenaGraders.grade_honest_trader,
+    environment_class=MarketEnvironment,
+    grader_callable=MarketGraders.grade_reliable_partner,
     max_steps=100,
 )
 
 # ---------------------------------------------------------
-# TASK 3: HARD - Master Negotiator
+# TASK 3: HARD - Strategic Alliance Master
 # ---------------------------------------------------------
-# Measures advanced alliance maintenance and strategic adaptation.
-task_master_negotiator = TaskDefinition(
-    task_id="arena-master-negotiator-v1",
-    name="Master Negotiator",
+# Measures advanced partnership maintenance and strategic adaptation.
+task_strategic_alliance_master = TaskDefinition(
+    task_id="market-strategic-alliance-master-v1",
+    name="Strategic Alliance Master",
     description=(
-        "Maintain alliance stability under resource pressure while accumulating wealth. "
-        "Tests advanced social intelligence, long-term planning, and multi-variable optimization."
+        "Maintain partnership stability under capital pressure while accumulating wealth. "
+        "Tests advanced negotiation skills, long-term planning, and multi-variable optimization."
     ),
-    environment_class=ArenaEnvironment,
-    grader_callable=ArenaGraders.grade_master_negotiator,
+    environment_class=MarketEnvironment,
+    grader_callable=MarketGraders.grade_strategic_alliance_master,
     max_steps=100,
 )
 
 # Official registry list exported to the OpenEnv platform for benchmark runs.
 # All tasks share the same environment but differ in grader (objective) and difficulty.
-ARENA_TASKS = [
-    task_resource_scavenger,
-    task_honest_trader,
-    task_master_negotiator,
+MARKET_TASKS = [
+    task_capital_accumulator,
+    task_reliable_partner,
+    task_strategic_alliance_master,
 ]
+
+# Legacy aliases for backward compatibility
+ARENA_TASKS = MARKET_TASKS
+task_resource_scavenger = task_capital_accumulator
+task_honest_trader = task_reliable_partner
+task_master_negotiator = task_strategic_alliance_master
