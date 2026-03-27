@@ -1,17 +1,17 @@
 <div align="center">
 
-# 🤝 AI Negotiation Arena
+![Header](https://capsule-render.vercel.app/api?type=waving&color=gradient&height=250&section=header&text=AI%20Negotiation%20Arena&fontSize=60&animation=fadeIn&fontAlignY=40&desc=Multi-Agent%20Reinforcement%20Learning%20Environment&descAlignY=65&descSize=22)
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg?style=for-the-badge&logo=python&logoColor=white)
 ![OpenEnv](https://img.shields.io/badge/OpenEnv-Compatible-success.svg?style=for-the-badge)
 ![Tests](https://img.shields.io/badge/Tests-22%20Passed-brightgreen.svg?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Phase-1_Complete-purple.svg?style=for-the-badge)
 
+
+
 *A deterministic, multi-agent reinforcement learning environment evaluating the social intelligence, long-term planning, and negotiation capabilities of LLMs.*
 
 </div>
-
----
 
 ## 🏗️ Architecture & Engineering Highlights
 
