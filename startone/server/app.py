@@ -45,15 +45,15 @@ except ModuleNotFoundError:
 
 # Create the app with web interface and README integration
 app = create_app(
-    StartoneEnvironment,
-    StartoneAction,
-    StartoneObservation,
+    StartoneEnvironment,  # type: ignore[arg-type]
+    StartoneAction,  # type: ignore[arg-type]
+    StartoneObservation,  # type: ignore[arg-type]
     env_name="startone",
     max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
 )
 
 
-def main(host: str = "0.0.0.0", port: int = 8000):
+def main() -> None:
     """
     Entry point for direct execution via uv run or python -m.
 
@@ -72,13 +72,14 @@ def main(host: str = "0.0.0.0", port: int = 8000):
     """
     import uvicorn
 
-    uvicorn.run(app, host=host, port=port)
-
-
-if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
-    main(port=args.port)
+    uvicorn.run(app, host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()

@@ -21,6 +21,7 @@ dependencies = [
     # Baseline agent runtime dependencies
     "google-genai>=0.3.0",
     "google-generativeai>=0.8.0",
+    "openai>=1.40.0",
     "python-dotenv>=1.0.0",
     # Environment-specific dependencies
     # Add all dependencies needed for your environment here

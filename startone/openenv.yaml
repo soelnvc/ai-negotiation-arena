@@ -65,6 +65,10 @@ supported_agents:
     description: "Google Gemini 2.5 Flash LLM (primary baseline)"
     sdk: "google.generativeai"
     config_required: ["GEMINI_API_KEY"]
+  - name: "openai-compatible-inference"
+    description: "Submission inference path using OpenAI Client over API_BASE_URL"
+    sdk: "openai"
+    config_required: ["API_BASE_URL", "MODEL_NAME", "HF_TOKEN"]
   - name: "rule_based_fallback"
     description: "Deterministic rule-based strategy (no API calls required)"
     sdk: "none"
