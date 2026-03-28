@@ -15,8 +15,9 @@ The default model and runtime behavior can be tuned via constants and env vars.
 import json
 import logging
 import os
+import threading
 import time
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from dotenv import load_dotenv
 from pydantic import ValidationError
@@ -49,6 +50,12 @@ MAX_RETRIES = 2
 BACKOFF_BASE = 0.2
 BACKOFF_MULTIPLIER = 2
 RUN_QUERIES = 100
+QUARTER_LOOP_DELAY_SECONDS = 0
+
+# Fallback alignment with hardened environment economics.
+CONTRACT_HOSTILE_TRUST_GUARD = -0.3
+PARTNERSHIP_TRUST_CAP_GUARD = 0.95
+PARTNERSHIP_MIN_CAPITAL = 80
 
 # Default model can be overridden via GEMINI_MODEL in .env
 DEFAULT_MODEL_NAME = "gemini-2.5-flash"
@@ -72,52 +79,102 @@ Current State:
 
 Action Economics:
 - Produce: +5 reward, +10 capital (safe, builds reserves)
-- Execute_Contract: +20 reward, -20 capital (risky, costs resources)
-- Form_Partnership: +30 reward, 0 capital (builds trust, high reward but target must be trusted)
-- Breach_Contract: +40 reward, -30 capital cost BUT only if target trust < -0.2 (exploit enemies, huge cost)
+- Execute_Contract: reward scales with amount (roughly 2x amount, capped), costs your sent amount
+- Form_Partnership: costs 10 capital; reward diminishes with repeated partnerships
+- Breach_Contract: reward scales with seized capital (max at full seize), trust drops heavily
 
 Strategy Tips:
 - When Capital < 50: Use Produce more to rebuild reserves
-- When Capital >= 60 and target trust > 0: Execute_Contract selectively
-- When Capital >= 60 and target trust >= 0.35: Form_Partnership (best ROI)
-- AVOID breaching unless capital is comfortable and target is hostile
+- Prefer Execute_Contract when trust is not strongly hostile and amount is meaningful
+- Use Form_Partnership selectively; repeating it has diminishing returns
+- AVOID breaching unless target actually has capital worth seizing
 
 Respond with ONLY valid JSON (no markdown, no extra text). The JSON must have exactly these fields:
 {{
   "action_type": "Produce" OR "Execute_Contract" OR "Form_Partnership" OR "Breach_Contract",
   "target_id": null OR one of {targets},
-  "amount": 0 (integer)
+    "amount": integer
 }}
 
 Rules:
 - Produce: target_id must be null, amount must be 0
-- Execute_Contract: target_id must be a competitor name, amount must be positive integer
+- Execute_Contract: target_id must be a competitor name, amount must be positive integer,
+    amount <= capital, and ideally amount in [1, min(25, capital//4)]
 - Form_Partnership: target_id must be a competitor name, amount must be 0
 - Breach_Contract: target_id must be a competitor name, amount must be 0
 
 Return ONLY the JSON object, nothing else."""
 
 # --- 1. Lazy Client Initialization ---
-_client: Optional[Any] = None
+_thread_state = threading.local()
+
+
+def _get_thread_client() -> Optional[Any]:
+    """Return thread-local model client if initialized."""
+    return getattr(_thread_state, "client", None)
+
+
+def _set_thread_client(client: Any) -> None:
+    """Store model client in thread-local runtime state."""
+    _thread_state.client = client
+
+
+def _build_metrics_template() -> dict[str, float]:
+    """Return a fresh metrics dict for runtime telemetry."""
+    return {
+        "attempts": 0.0,
+        "successes": 0.0,
+        "fallbacks": 0.0,
+        "api_errors": 0.0,
+        "network_errors": 0.0,
+        "auth_errors": 0.0,
+        "quota_errors": 0.0,
+        "config_errors": 0.0,
+        "sdk_errors": 0.0,
+        "json_errors": 0.0,
+        "validation_errors": 0.0,
+        "total_latency_ms": 0.0,
+    }
+
+
+def _get_thread_metrics() -> dict[str, float]:
+    """Return thread-local metrics store, creating it lazily if needed."""
+    metrics = getattr(_thread_state, "metrics", None)
+    if metrics is None:
+        metrics = _build_metrics_template()
+        _thread_state.metrics = metrics
+    return metrics
+
+
+class _MetricsProxy(dict):
+    """Dictionary-like proxy backed by thread-local metrics state.
+
+    This preserves current module API while avoiding cross-thread state bleed.
+    """
+
+    def __getitem__(self, key: str) -> float:
+        return _get_thread_metrics()[key]
+
+    def __setitem__(self, key: str, value: float) -> None:
+        _get_thread_metrics()[key] = value
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(_get_thread_metrics())
+
+    def __len__(self) -> int:
+        return len(_get_thread_metrics())
+
+    def get(self, key: str, default: Optional[float] = None) -> Optional[float]:
+        return _get_thread_metrics().get(key, default)
+
+    def copy(self) -> dict[str, float]:
+        return dict(_get_thread_metrics())
 
 # Lightweight runtime telemetry for decision quality and reliability.
 # - attempts/successes/fallbacks: overall decision pipeline outcomes
 # - *_errors: categorized failure reasons
 # - total_latency_ms: cumulative latency across all decisions
-DECISION_METRICS: dict[str, float] = {
-    "attempts": 0.0,
-    "successes": 0.0,
-    "fallbacks": 0.0,
-    "api_errors": 0.0,
-    "network_errors": 0.0,
-    "auth_errors": 0.0,
-    "quota_errors": 0.0,
-    "config_errors": 0.0,
-    "sdk_errors": 0.0,
-    "json_errors": 0.0,
-    "validation_errors": 0.0,
-    "total_latency_ms": 0.0,
-}
+DECISION_METRICS: dict[str, float] = _MetricsProxy()
 
 
 def is_safe_mode_enabled() -> bool:
@@ -143,8 +200,8 @@ def get_client() -> Any:
     Raises:
         ValueError: If GEMINI_API_KEY is missing.
     """
-    global _client
-    if _client is None:
+    client = _get_thread_client()
+    if client is None:
         load_dotenv()
         api_key = os.getenv("GEMINI_API_KEY")
         model_name = os.getenv("GEMINI_MODEL", DEFAULT_MODEL_NAME)
@@ -152,8 +209,9 @@ def get_client() -> Any:
             raise ValueError("GEMINI_API_KEY missing in .env")
 
         gemini_sdk.configure(api_key=api_key)  # type: ignore[attr-defined]
-        _client = gemini_sdk.GenerativeModel(model_name)  # type: ignore[attr-defined]
-    return _client
+        client = gemini_sdk.GenerativeModel(model_name)  # type: ignore[attr-defined]
+        _set_thread_client(client)
+    return client
 
 
 def get_startup_health() -> dict[str, Any]:
@@ -170,7 +228,7 @@ def get_startup_health() -> dict[str, Any]:
         "safe_mode": is_safe_mode_enabled(),
         "has_api_key": has_api_key,
         "model_name": model_name,
-        "client_initialized": _client is not None,
+        "client_initialized": _get_thread_client() is not None,
     }
 
 
@@ -252,7 +310,7 @@ def get_decision_metrics() -> dict[str, float]:
     `avg_latency_ms` is derived from `total_latency_ms / max(attempts, 1)`
     to avoid divide-by-zero during early runs.
     """
-    snapshot = dict(DECISION_METRICS)
+    snapshot = DECISION_METRICS.copy()
     attempts = max(1.0, snapshot["attempts"])
     snapshot["avg_latency_ms"] = snapshot["total_latency_ms"] / attempts
     return snapshot
@@ -260,8 +318,7 @@ def get_decision_metrics() -> dict[str, float]:
 
 def reset_decision_metrics() -> None:
     """Reset all decision telemetry counters to zero."""
-    for key in DECISION_METRICS:
-        DECISION_METRICS[key] = 0.0
+    _thread_state.metrics = _build_metrics_template()
 
 
 def _categorize_api_error(exc: Exception) -> str:
@@ -272,6 +329,19 @@ def _categorize_api_error(exc: Exception) -> str:
     """
     message = str(exc).lower()
     exc_type = type(exc).__name__
+    exc_type_lower = exc_type.lower()
+
+    # Prefer exception class names for more stable categorization across SDK versions.
+    if exc_type in {"DeadlineExceeded", "ServiceUnavailable", "ConnectionError", "TimeoutError"}:
+        return "network_errors"
+    if exc_type in {"Unauthenticated", "PermissionDenied", "AuthenticationError"}:
+        return "auth_errors"
+    if exc_type in {"ResourceExhausted", "TooManyRequests", "RateLimitError"}:
+        return "quota_errors"
+    if exc_type in {"InvalidArgument", "FailedPrecondition", "NotFound"}:
+        return "api_errors"
+    if exc_type in {"ModuleNotFoundError", "ImportError", "AttributeError"}:
+        return "sdk_errors"
 
     # Check exception types first (more reliable than string matching)
     if isinstance(exc, (TimeoutError, ConnectionError)):
@@ -289,7 +359,7 @@ def _categorize_api_error(exc: Exception) -> str:
         return "quota_errors"
     if any(x in message for x in ["attribute", "import", "module", "sdk"]):
         return "sdk_errors"
-    if "error" in exc_type.lower():
+    if "error" in exc_type_lower:
         return "api_errors"
     
     logger.debug(f"Uncategorized error: {exc_type} - {message}")
@@ -299,9 +369,9 @@ def _categorize_api_error(exc: Exception) -> str:
 def get_safe_fallback(obs: MarketObservation) -> MarketAction:
     """Return a deterministic fallback action from observation state.
 
-    Strategy order:
-    1. Prefer partnerships when trust is strong.
-    2. Execute contracts when capital and trust are healthy.
+    Strategy order (aligned with hardened environment economics):
+    1. Prefer partnerships only when trust is strong but not near cap and capital is healthy.
+    2. Execute contracts when capital is sufficient and trust is not strongly hostile.
     3. Breach only under low-capital + hostile-trust conditions.
     4. Otherwise produce as the safest default.
     """
@@ -310,12 +380,16 @@ def get_safe_fallback(obs: MarketObservation) -> MarketAction:
     if ranked_targets:
         best_target, best_trust = ranked_targets[0]
 
-        # Partner first when trust is strong
-        if best_trust >= TRUST_THRESHOLD_PARTNERSHIP:
+        # Partner only with healthy capital and non-saturated trust.
+        if (
+            best_trust >= TRUST_THRESHOLD_PARTNERSHIP
+            and best_trust < PARTNERSHIP_TRUST_CAP_GUARD
+            and obs.capital >= PARTNERSHIP_MIN_CAPITAL
+        ):
             return MarketAction(action_type="Form_Partnership", target_id=best_target, amount=0)
 
-        # Contract when capital and trust allow it
-        if obs.capital >= CAPITAL_THRESHOLD_CONTRACT and best_trust >= 0.0:
+        # Contract when capital and trust allow it.
+        if obs.capital >= CAPITAL_THRESHOLD_CONTRACT and best_trust > CONTRACT_HOSTILE_TRUST_GUARD:
             trade_amount = max(10, min(25, obs.capital // 4))
             return MarketAction(
                 action_type="Execute_Contract",
@@ -421,7 +495,8 @@ def run_simulation():
     _emit(health_msg)
     
     for q in range(1, RUN_QUERIES + 1):
-        time.sleep(5)  # Buffer between quarters
+        if QUARTER_LOOP_DELAY_SECONDS > 0:
+            time.sleep(QUARTER_LOOP_DELAY_SECONDS)
         action = get_corporate_decision(obs)
         obs = env.step(action, actor_id="Firm_A")
         quarter_msg = f"Q{q} | {action.action_type} -> Reward: {obs.reward} | Capital: {obs.capital}"

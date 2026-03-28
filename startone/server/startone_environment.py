@@ -49,7 +49,15 @@ class MarketEnvironment(Environment):
     STARTING_CAPITAL = 100
     MAX_EPISODE_STEPS = 100
     BREACH_GAIN = 15
+    CONTRACT_BASE_AMOUNT = 10
+    CONTRACT_MAX_REWARD = 20.0
+    CONTRACT_HOSTILE_TRUST_GUARD = -0.3
+    BREACH_MAX_REWARD = 40.0
     PARTNERSHIP_REWARD = 30.0
+    PARTNERSHIP_MIN_REWARD = 5.0
+    PARTNERSHIP_STREAK_PENALTY = 10.0
+    PARTNERSHIP_TRUST_CAP_GUARD = 0.95
+    PARTNERSHIP_TOTAL_PENALTY = 3.0
 
     def __init__(self):
         """Initializes the market environment and default firm list."""
@@ -108,6 +116,7 @@ class MarketEnvironment(Environment):
                 "successful_contracts": 0.0,
                 "contracts_breached": 0.0,
                 "partnership_streak_steps": 0.0,
+                "partnership_total_count": 0.0,
                 "market_decline_ratio": 0.0
             } for fid in self._firm_ids
         }
@@ -153,11 +162,27 @@ class MarketEnvironment(Environment):
             MarketObservation: Outcome with reward, capital, trust_scores, done flag.
             
         Behavior:
-        - Invalid/unsupported actions return error observation with penalty, no turn consumed.
+        - Unknown actor sessions return safe error observation, no turn consumed.
+        - Invalid/unsupported actions for valid sessions return error observation with penalty and consume a turn.
         - Valid actions consume a turn, may mutate state, return reward.
         """
         actor_id = kwargs.get("actor_id", self.DEFAULT_ACTOR_ID)
         action_type = getattr(action, "action_type", None)
+
+        def _consume_turn_with_error(message: str, penalty: float = -10.0) -> MarketObservation:
+            """Apply probing penalty by consuming a turn on invalid/unsupported actions."""
+            self._set_telemetry(actor_id, "partnership_streak_steps", 0.0)
+            self._state.step_count += 1
+            self._update_global_decline_ratio()
+            done_local = self._state.step_count >= self._state.max_rounds
+            return MarketObservation(
+                done=done_local,
+                reward=penalty,
+                capital=self._state.firm_capital[actor_id],
+                trust_scores=self._get_trust_for(actor_id),
+                active_partnerships=[],
+                message=message,
+            )
 
         # ===== Validation Phase =====
         # 1. Validate session actor before any state mutation.
@@ -174,7 +199,7 @@ class MarketEnvironment(Environment):
 
         # 3. Validate action payload shape before routing.
         if action_type is None:
-            return self._generate_error_obs(actor_id, "Invalid action payload: missing action_type")
+            return _consume_turn_with_error("Invalid action payload: missing action_type")
 
         # 4. Validate action parameters based on type BEFORE routing
         # Execute_Contract requires target_id and positive amount
@@ -182,7 +207,7 @@ class MarketEnvironment(Environment):
             target_id = getattr(action, "target_id", None)
             amount = getattr(action, "amount", 0)
             if target_id is None or amount <= 0:
-                return self._generate_error_obs(actor_id, "Invalid action payload: missing action_type")
+                return _consume_turn_with_error("Invalid action payload: missing action_type")
         
         # ===== Routing & Action Execution =====
         # Route to appropriate action handler.
@@ -196,8 +221,8 @@ class MarketEnvironment(Environment):
             reward = 5.0
             self._state.firm_capital[actor_id] += 10
         else:
-            # Unsupported action does not consume a turn.
-            return self._generate_error_obs(actor_id, f"Unsupported action: {action_type}")
+            # Unsupported action consumes a turn to prevent probing exploits.
+            return _consume_turn_with_error(f"Unsupported action: {action_type}")
 
         # ===== Telemetry & Termination =====
         # Reset partnership streak if not a Form_Partnership action (only contiguous Form_Partnership turns count).
@@ -225,7 +250,8 @@ class MarketEnvironment(Environment):
         2. Check actor has enough capital to exchange.
         3. Actor loses 'amount'; target gains (amount * 1.2), rounded down.
         4. Both parties gain +0.05 trust (market cooperation).
-        5. Increment successful_contracts counter.
+        5. Reward is proportional to amount up to CONTRACT_MAX_REWARD.
+        6. Increment successful_contracts counter.
         
         Args:
             actor_id: Firm executing the contract.
@@ -241,6 +267,11 @@ class MarketEnvironment(Environment):
         if action.action_type != "Execute_Contract" or target_id == actor_id or target_id not in self._firm_ids:
             return -10.0
 
+        # Guard against high-reward contracting with strongly hostile trust.
+        trust_to_target = self._state.trust_matrix.get(actor_id, {}).get(target_id, 0.0)
+        if trust_to_target <= self.CONTRACT_HOSTILE_TRUST_GUARD:
+            return -5.0
+
         if self._state.firm_capital[actor_id] >= amount:
             self._state.firm_capital[actor_id] -= amount
             # Deterministic Economy: 20% gain on contract
@@ -250,7 +281,8 @@ class MarketEnvironment(Environment):
             # Update Trust
             self._update_trust(actor_id, target_id, 0.05) 
             self._increment_telemetry(actor_id, "successful_contracts", 1.0)
-            return 20.0 
+            reward = min(self.CONTRACT_MAX_REWARD, 2.0 * amount)
+            return float(reward)
             
         return -5.0
 
@@ -281,7 +313,8 @@ class MarketEnvironment(Environment):
         2. Check target has positive capital.
         3. Actor seizes min(BREACH_GAIN, target_balance).
         4. Trust with target drops -0.15 (severe damage).
-        5. Increment contracts_breached counter.
+        5. Reward scales with seized capital up to BREACH_MAX_REWARD.
+        6. Increment contracts_breached counter.
         
         Args:
             actor_id: Firm executing the breach.
@@ -303,34 +336,68 @@ class MarketEnvironment(Environment):
         self._state.firm_capital[actor_id] += seize_amount
         self._update_trust(actor_id, target_id, -0.15)
         self._increment_telemetry(actor_id, "contracts_breached", 1.0)
-        return 40.0
+        reward = (self.BREACH_MAX_REWARD * float(seize_amount)) / float(self.BREACH_GAIN)
+        return float(reward)
 
     def _handle_form_partnership(self, actor_id: str, action: MarketAction) -> float:
         """Execute a partnership: strengthen reciprocal trust and cooperation.
         
         Partnership mechanics:
         1. Validate action is a proper Form_Partnership (has target, no self-partnership).
-        2. Actor's trust in target increases +0.10 (mutual cooperation).
-        3. Target's trust in actor also increases +0.10 (symmetric).
-        4. Increment partnership_streak_steps counter (only for contiguous Form_Partnership turns).
-        5. Return PARTNERSHIP_REWARD (+30.0).
+        2. Reject no-value spam when both trust directions are already near cap.
+        3. Deduct fixed coordination cost from actor capital.
+        4. Actor/target trust each increase +0.10 (symmetric cooperation).
+        5. Increment partnership_streak_steps counter.
+        6. Apply diminishing reward by contiguous partnership streak.
         
         Args:
             actor_id: Firm initiating the partnership request.
             action: MarketAction with target_id.
             
         Returns:
-            float: Reward (+30.0 on success, -10.0 on failure).
+            float: Reward (+30.0 first success, then diminished; negative on invalid attempts).
         """
         target_id = action.target_id
         if action.action_type != "Form_Partnership" or target_id is None or target_id == actor_id or target_id not in self._firm_ids:
             return -10.0
 
-        # Partnership is symmetric strategic cooperation.
-        self._update_trust(actor_id, target_id, 0.10)
-        self._update_trust(target_id, actor_id, 0.10)
-        self._increment_telemetry(actor_id, "partnership_streak_steps", 1.0)
-        return self.PARTNERSHIP_REWARD
+        actor_trust = self._state.trust_matrix.get(actor_id, {}).get(target_id, 0.0)
+        target_trust = self._state.trust_matrix.get(target_id, {}).get(actor_id, 0.0)
+
+        # Guard against no-value reward farming when trust is effectively saturated.
+        if (
+            actor_trust >= self.PARTNERSHIP_TRUST_CAP_GUARD
+            and target_trust >= self.PARTNERSHIP_TRUST_CAP_GUARD
+        ):
+            return -2.0
+
+        # The cost of doing business (lawyers, integration, etc.)
+        cost = 10
+
+        if self._state.firm_capital[actor_id] >= cost:
+            # Deduct the money from the firm's bank account
+            self._state.firm_capital[actor_id] -= cost
+            
+            # Partnership is symmetric strategic cooperation.
+            self._update_trust(actor_id, target_id, 0.10)
+            self._update_trust(target_id, actor_id, 0.10)
+
+            current_streak = self._state.telemetry.get(actor_id, {}).get("partnership_streak_steps", 0.0)
+            current_total = self._state.telemetry.get(actor_id, {}).get("partnership_total_count", 0.0)
+            # Diminishing returns: repeated partnerships pay less both by streak and total count.
+            reward = max(
+                self.PARTNERSHIP_MIN_REWARD,
+                self.PARTNERSHIP_REWARD
+                - (self.PARTNERSHIP_STREAK_PENALTY * current_streak)
+                - (self.PARTNERSHIP_TOTAL_PENALTY * current_total),
+            )
+            self._increment_telemetry(actor_id, "partnership_streak_steps", 1.0)
+            self._increment_telemetry(actor_id, "partnership_total_count", 1.0)
+            
+            return float(reward)
+        else:
+            # Penalty for trying to form a partnership when broke
+            return -5.0
 
     def _increment_telemetry(self, actor_id: str, key: str, delta: float) -> None:
         """Increment a per-firm telemetry counter safely.
@@ -353,6 +420,7 @@ class MarketEnvironment(Environment):
             "successful_contracts": 0.0,
             "contracts_breached": 0.0,
             "partnership_streak_steps": 0.0,
+            "partnership_total_count": 0.0,
             "market_decline_ratio": 0.0,
         }
         row = self._state.telemetry.setdefault(actor_id, defaults.copy())
@@ -379,6 +447,7 @@ class MarketEnvironment(Environment):
             "successful_contracts": 0.0,
             "contracts_breached": 0.0,
             "partnership_streak_steps": 0.0,
+            "partnership_total_count": 0.0,
             "market_decline_ratio": 0.0,
         }
         row = self._state.telemetry.setdefault(actor_id, defaults.copy())

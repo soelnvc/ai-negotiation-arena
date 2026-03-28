@@ -56,7 +56,7 @@ def test_form_partnership_updates_trust_and_consumes_turn() -> None:
     assert after == 1
 
 
-def test_unsupported_action_does_not_consume_turn() -> None:
+def test_unsupported_action_consumes_turn() -> None:
     env = MarketEnvironment()
     env.reset(seed=1)
 
@@ -66,7 +66,7 @@ def test_unsupported_action_does_not_consume_turn() -> None:
 
     assert obs.reward == -10.0
     assert before == 0
-    assert after == 0
+    assert after == 1
 
 
 def test_unknown_firm_returns_safe_error_observation() -> None:
@@ -103,7 +103,7 @@ def test_legacy_action_payload_is_handled_without_crash() -> None:
 
     assert obs.reward == -10.0
     assert "missing action_type" in obs.message
-    assert before == after
+    assert after == before + 1
 
 
 def test_telemetry_defaults_initialized_on_reset() -> None:
