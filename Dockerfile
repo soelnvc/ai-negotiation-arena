@@ -12,13 +12,14 @@ COPY . /app
 
 # Install only runtime dependencies with bounded versions for reproducibility.
 RUN pip install --no-cache-dir --upgrade pip && \
-		pip install --no-cache-dir \
-				"fastapi>=0.110,<1.0" \
-				"uvicorn[standard]>=0.30,<1.0" \
-				"pydantic>=2.0,<3.0" \
-				"python-dotenv>=1.0,<2.0" \
-				"google-genai>=0.3,<1.0" \
-				"google-generativeai>=0.8,<1.0"
+        pip install --no-cache-dir \
+                "fastapi>=0.110,<1.0" \
+                "uvicorn[standard]>=0.30,<1.0" \
+                "pydantic>=2.0,<3.0" \
+                "python-dotenv>=1.0,<2.0" \
+                "google-genai>=0.3,<1.0" \
+                "google-generativeai>=0.8,<1.0" \
+                "openenv"
 
 # Run as non-root user for better container security posture.
 RUN addgroup --system app && adduser --system --ingroup app app && chown -R app:app /app
