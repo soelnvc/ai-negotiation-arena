@@ -1,3 +1,12 @@
+---
+title: AI Market Negotiation
+emoji: 📊
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+short_description: Multi-agent B2B corporate logistics and trust simulation
+---
 <div align="center">
 
 ![Header](https://capsule-render.vercel.app/api?type=waving&color=gradient&height=250&section=header&text=Autonomous%20B2B%20Market&fontSize=60&animation=fadeIn&fontAlignY=40&desc=Multi-Agent%20Corporate%20Negotiation%20Environment&descAlignY=65&descSize=22)
