@@ -18,10 +18,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 RUN addgroup --system app && adduser --system --ingroup app app && chown -R app:app /app
 USER app
 
-EXPOSE 8000
+EXPOSE 7860
 
 # Port-level health check without curl dependency.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-	CMD python -c "import socket,sys; s=socket.socket(); s.settimeout(2); sys.exit(0 if s.connect_ex(('127.0.0.1',8000))==0 else 1)"
+	CMD python -c "import os,socket,sys; p=int(os.getenv('PORT','7860')); s=socket.socket(); s.settimeout(2); sys.exit(0 if s.connect_ex(('127.0.0.1',p))==0 else 1)"
 
-CMD ["uvicorn", "startone.server.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn startone.server.app:app --host 0.0.0.0 --port ${PORT:-7860}"]
