@@ -5,3 +5,67 @@ runtime: fastapi
 app: server.app:app
 port: 8000
 
+metadata:
+  author: "Development Team"
+  created: "2026-03-28"
+  openenv_spec_version: "1.0"
+  description: "Baseline multi-agent B2B market evaluation platform with Gemini integration."
+
+environment:
+  name: "autonomous_b2b_market"
+  version: "1.0.0"
+  description: "Multi-agent B2B corporate logistics and trust simulation."
+  config:
+    num_competitors: 3
+    starting_capital: 100
+    quarters_per_episode: 100
+    market_volatility: "medium"
+
+server:
+  timeout: 300        # seconds per API call before timeout
+  max_retries: 3      # attempts before falling back to rule-based strategy
+
+# Reward thresholds are calibrated as follows:
+# Independent Producer: ~5 reward/quarter × 100 = 500 baseline; set to 250 (conservative survival)
+# Ethical Contractor: requires partnerships (~30 reward); difficult without breaching; set to 500
+# Enterprise Stabilizer: must maintain trust during crash; high partnership frequency needed; set to 400
+
+tasks:
+  - id: "independent_producer"
+    description: "Survive strictly through internal production."
+    entrypoint: "server.tasks:IndependentProducerTask"
+    config:
+      quarters: 100                      # duration of simulation
+      starting_capital: 100              # initial capital for the firm
+      min_reward_threshold: 250          # minimum cumulative reward to pass
+      breaches_allowed: 0                # zero breaches permitted for ethical baseline
+
+  - id: "ethical_contractor"
+    description: "Maximize capital through partnerships without breaching."
+    entrypoint: "server.tasks:EthicalContractorTask"
+    config:
+      quarters: 100                      # duration of simulation
+      starting_capital: 100              # initial capital for the firm
+      min_reward_threshold: 500          # higher threshold for partnership-heavy strategy
+      breaches_allowed: 0                # no breaches allowed; ethical focus
+
+  - id: "enterprise_stabilizer"
+    description: "Maintain partnerships during market crash."
+    entrypoint: "server.tasks:EnterpriseStabilizerTask"
+    config:
+      quarters: 100                      # duration of simulation
+      starting_capital: 100              # initial capital for the firm
+      min_reward_threshold: 400          # intermediate threshold; crash is a negative pressure
+      breaches_allowed: 0                # no breaches allowed
+      crash_quarter: 50                  # market crash triggers at quarter 50 (midpoint)
+      crash_severity: 0.5                # 50% reduction in trust scores during crash
+
+supported_agents:
+  - name: "gemini-2.5-flash"
+    description: "Google Gemini 2.5 Flash LLM (primary baseline)"
+    sdk: "google.generativeai"
+    config_required: ["GEMINI_API_KEY"]
+  - name: "rule_based_fallback"
+    description: "Deterministic rule-based strategy (no API calls required)"
+    sdk: "none"
+    config_required: []
