@@ -53,6 +53,11 @@ app = create_app(
 )
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"status": "ok", "service": "startone"}
+
+
 def main() -> None:
     """
     Entry point for direct execution via uv run or python -m.
