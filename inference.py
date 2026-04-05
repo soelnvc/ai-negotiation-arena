@@ -13,9 +13,14 @@ from __future__ import annotations
 
 import json
 import os
+import time
+import warnings
 from typing import Any
 
 from openai import OpenAI
+
+# Keep stdout deterministic by suppressing third-party deprecation noise.
+warnings.filterwarnings("ignore", category=FutureWarning, module=r"startone\.client")
 
 from startone.models import MarketAction, MarketObservation
 from startone.server.tasks import MARKET_TASKS
@@ -34,8 +39,20 @@ HF_TOKEN = _require_env("HF_TOKEN")
 
 ACTOR_ID = "Firm_A"
 MAX_STEPS_PER_TASK = int(os.getenv("MAX_STEPS_PER_TASK", "100"))
+MAX_TOTAL_RUNTIME_SECONDS = int(os.getenv("MAX_TOTAL_RUNTIME_SECONDS", "1100"))
+REQUEST_TIMEOUT_SECONDS = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "20"))
 
-client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+client = OpenAI(
+    base_url=API_BASE_URL,
+    api_key=HF_TOKEN,
+    timeout=REQUEST_TIMEOUT_SECONDS,
+    max_retries=1,
+)
+
+
+def _emit(tag: str, payload: dict[str, Any]) -> None:
+    """Emit one structured log line in the required tagged format."""
+    print(f"[{tag}] {json.dumps(payload, separators=(',', ':'))}")
 
 
 def _extract_text(response: Any) -> str:
@@ -125,31 +142,58 @@ Return only JSON object.
     return MarketAction(**clean_data)
 
 
-def run_task(task: Any) -> float:
+def run_task(task: Any, deadline: float) -> float:
     """Run a single task and return its normalized score [0.0, 1.0]."""
     env = task.environment_class()
     obs = env.reset(actor_id=ACTOR_ID)
 
     max_steps = min(int(task.max_steps), MAX_STEPS_PER_TASK)
+    executed_steps = 0
     for _ in range(max_steps):
+        if time.monotonic() >= deadline:
+            break
         try:
             action = _llm_action(obs)
         except Exception:
             action = _safe_fallback(obs)
 
         obs = env.step(action, actor_id=ACTOR_ID)
+        executed_steps += 1
         if obs.done:
             break
 
     telemetry = env.state.telemetry.get(ACTOR_ID, {})
     raw_score = float(task.grader_callable(env.state, ACTOR_ID, telemetry))
-    return max(0.0, min(1.0, raw_score))
+    score = max(0.0, min(1.0, raw_score))
+    _emit(
+        "STEP",
+        {
+            "task": str(getattr(task, "task_id", getattr(task, "name", "unknown-task")),),
+            "steps_executed": executed_steps,
+            "score": round(score, 4),
+        },
+    )
+    return score
 
 
 def main() -> None:
+    start_time = time.monotonic()
+    deadline = start_time + MAX_TOTAL_RUNTIME_SECONDS
+    _emit(
+        "START",
+        {
+            "model": MODEL_NAME,
+            "max_steps_per_task": MAX_STEPS_PER_TASK,
+            "max_total_runtime_seconds": MAX_TOTAL_RUNTIME_SECONDS,
+        },
+    )
+
     results: dict[str, float] = {}
     for task in MARKET_TASKS:
-        score = run_task(task)
+        if time.monotonic() >= deadline:
+            break
+
+        score = run_task(task, deadline)
         task_name = getattr(task, "task_id", getattr(task, "name", "unknown-task"))
         results[str(task_name)] = round(score, 4)
 
@@ -158,8 +202,9 @@ def main() -> None:
         "model": MODEL_NAME,
         "tasks": results,
         "average_score": round(average, 4),
+        "elapsed_seconds": round(time.monotonic() - start_time, 2),
     }
-    print(json.dumps(output, indent=2))
+    _emit("END", output)
 
 
 if __name__ == "__main__":

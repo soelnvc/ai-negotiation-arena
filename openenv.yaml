@@ -1,0 +1,66 @@
+spec_version: 1
+name: startone
+type: space
+runtime: fastapi
+app: startone.server.app:app
+port: 8000
+
+metadata:
+  author: "Development Team"
+  created: "2026-03-28"
+  openenv_spec_version: "1.0"
+  description: "Baseline multi-agent B2B market evaluation platform with OpenAI-compatible inference."
+
+environment:
+  name: "autonomous_b2b_market"
+  version: "1.0.0"
+  description: "Multi-agent B2B corporate logistics and trust simulation."
+  config:
+    num_competitors: 3
+    starting_capital: 100
+    quarters_per_episode: 100
+    market_volatility: "medium"
+
+server:
+  timeout: 300
+  max_retries: 3
+
+tasks:
+  - id: "independent_producer"
+    description: "Survive strictly through internal production."
+    entrypoint: "startone.server.tasks:IndependentProducerTask"
+    config:
+      quarters: 100
+      starting_capital: 100
+      min_reward_threshold: 250
+      breaches_allowed: 0
+
+  - id: "ethical_contractor"
+    description: "Maximize capital through partnerships without breaching."
+    entrypoint: "startone.server.tasks:EthicalContractorTask"
+    config:
+      quarters: 100
+      starting_capital: 100
+      min_reward_threshold: 500
+      breaches_allowed: 0
+
+  - id: "enterprise_stabilizer"
+    description: "Maintain partnerships during market crash."
+    entrypoint: "startone.server.tasks:EnterpriseStabilizerTask"
+    config:
+      quarters: 100
+      starting_capital: 100
+      min_reward_threshold: 400
+      breaches_allowed: 0
+      crash_quarter: 50
+      crash_severity: 0.5
+
+supported_agents:
+  - name: "openai-compatible-inference"
+    description: "Submission inference path using OpenAI Client over API_BASE_URL"
+    sdk: "openai"
+    config_required: ["API_BASE_URL", "MODEL_NAME", "HF_TOKEN"]
+  - name: "rule_based_fallback"
+    description: "Deterministic rule-based strategy (no API calls required)"
+    sdk: "none"
+    config_required: []

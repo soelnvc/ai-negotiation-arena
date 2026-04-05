@@ -59,8 +59,8 @@ from .graders import MarketGraders
 # ---------------------------------------------------------
 # Measures basic survival and capital accumulation capability.
 task_capital_accumulator = TaskDefinition(
-    task_id="market-capital-accumulator-v1",
-    name="Capital Accumulator",
+    task_id="independent_producer",
+    name="Independent Producer",
     description=(
         "Survive for 50 steps and accumulate as much capital as possible. "
         "Tests the firm's ability to understand basic market mechanics."
@@ -75,8 +75,8 @@ task_capital_accumulator = TaskDefinition(
 # ---------------------------------------------------------
 # Measures cooperation under temptation to breach contracts.
 task_reliable_partner = TaskDefinition(
-    task_id="market-reliable-partner-v1",
-    name="Reliable Partner",
+    task_id="ethical_contractor",
+    name="Ethical Contractor",
     description=(
         "Successfully complete 3 contracts without ever initiating a breach. "
         "Tests the firm's ability to cooperate and avoid destructive short-term gains."
@@ -91,8 +91,8 @@ task_reliable_partner = TaskDefinition(
 # ---------------------------------------------------------
 # Measures advanced partnership maintenance and strategic adaptation.
 task_strategic_alliance_master = TaskDefinition(
-    task_id="market-strategic-alliance-master-v1",
-    name="Strategic Alliance Master",
+    task_id="enterprise_stabilizer",
+    name="Enterprise Stabilizer",
     description=(
         "Maintain partnership stability under capital pressure while accumulating wealth. "
         "Tests advanced negotiation skills, long-term planning, and multi-variable optimization."
@@ -115,3 +115,8 @@ ARENA_TASKS = MARKET_TASKS
 task_resource_scavenger = task_capital_accumulator
 task_honest_trader = task_reliable_partner
 task_master_negotiator = task_strategic_alliance_master
+
+# OpenEnv YAML entrypoint compatibility aliases.
+IndependentProducerTask = task_capital_accumulator
+EthicalContractorTask = task_reliable_partner
+EnterpriseStabilizerTask = task_strategic_alliance_master
