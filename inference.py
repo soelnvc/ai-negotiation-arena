@@ -3,10 +3,11 @@
 This script evaluates all registered tasks using a single LLM policy and prints
 task scores in the required [0.0, 1.0] range.
 
-Required environment variables:
-- API_BASE_URL: OpenAI-compatible endpoint URL.
-- MODEL_NAME: Model identifier for inference.
-- HF_TOKEN: API key/token for the endpoint.
+Environment variables:
+- API_BASE_URL: OpenAI-compatible endpoint URL (default provided).
+- MODEL_NAME: Model identifier for inference (default provided).
+- HF_TOKEN: API key/token for the endpoint (no default).
+- LOCAL_IMAGE_NAME: Optional local image name (used only for docker-image execution flows).
 """
 
 from __future__ import annotations
@@ -26,16 +27,10 @@ from startone.models import MarketAction, MarketObservation
 from startone.server.tasks import MARKET_TASKS
 
 
-def _require_env(name: str) -> str:
-    value = os.getenv(name, "").strip()
-    if not value:
-        raise RuntimeError(f"Missing required environment variable: {name}")
-    return value
-
-
-API_BASE_URL = _require_env("API_BASE_URL")
-MODEL_NAME = _require_env("MODEL_NAME")
-HF_TOKEN = _require_env("HF_TOKEN")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
+HF_TOKEN = os.getenv("HF_TOKEN")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
 ACTOR_ID = "Firm_A"
 MAX_STEPS_PER_TASK = int(os.getenv("MAX_STEPS_PER_TASK", "100"))
