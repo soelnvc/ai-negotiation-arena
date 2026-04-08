@@ -72,6 +72,36 @@ class MarketGraders:
         return max(0.0, min(1.0, value))
 
     @staticmethod
+    def _clamp01_strict(value: float) -> float:
+        """Ensure score is strictly (0.0, 1.0) - open interval, never boundary values.
+        
+        Required by OpenEnv Phase 2 validation: scores must be strictly between 0 and 1,
+        never exactly 0.0 or 1.0.
+        
+        Behavior:
+        - None, NaN, Inf, or negative values -> 0.01 (epsilon buffer).
+        - Values > 1.0 -> 0.99 (epsilon buffer).
+        - Value == 0.0 -> 0.01
+        - Value == 1.0 -> 0.99
+        - Otherwise -> returned as-is if in (0.0, 1.0)
+        
+        Args:
+            value: Any float value.
+            
+        Returns:
+            float: Normalized value strictly within (0.0, 1.0).
+        """
+        EPSILON = 0.01
+        if value is None or math.isnan(value) or math.isinf(value):
+            return EPSILON
+        clamped = max(0.0, min(1.0, value))
+        if clamped <= 0.0:
+            return EPSILON
+        if clamped >= 1.0:
+            return 1.0 - EPSILON
+        return clamped
+
+    @staticmethod
     def _telemetry_value(
         telemetry: Optional[Mapping[str, float]],
         key: str,
@@ -150,7 +180,9 @@ class MarketGraders:
             capital_gain / MarketGraders.TARGET_RESOURCE_GAIN
         )
 
-        return (0.7 * survival_ratio) + (0.3 * gain_ratio)
+        return MarketGraders._clamp01_strict(
+            (0.7 * survival_ratio) + (0.3 * gain_ratio)
+        )
 
     @staticmethod
     def grade_reliable_partner(
@@ -198,9 +230,9 @@ class MarketGraders:
         )
 
         if contracts_breached > 0:
-            return 0.0
+            return MarketGraders._clamp01_strict(0.0)
 
-        return MarketGraders._clamp01(
+        return MarketGraders._clamp01_strict(
             successful_contracts / MarketGraders.TARGET_SUCCESSFUL_TRADES
         )
 
@@ -275,7 +307,7 @@ class MarketGraders:
                 partnership_streak / MarketGraders.TARGET_ALLIANCE_STREAK
             )
             scarcity_score = 0.4 * MarketGraders._clamp01(market_decline_ratio)
-            return MarketGraders._clamp01(partnership_score + scarcity_score)
+            return MarketGraders._clamp01_strict(partnership_score + scarcity_score)
 
         player_trust = state.trust_matrix.get(actor_id, {})
         if not player_trust:
@@ -284,7 +316,7 @@ class MarketGraders:
             avg_trust = sum(player_trust.values()) / len(player_trust)
             trust_ratio = MarketGraders._clamp01((avg_trust + 1.0) / 2.0)
 
-        return MarketGraders._clamp01(0.6 * trust_ratio)
+        return MarketGraders._clamp01_strict(0.6 * trust_ratio)
 
     # Legacy method aliases for backward compatibility
     @staticmethod

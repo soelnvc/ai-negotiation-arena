@@ -29,6 +29,7 @@ tasks:
   - id: "independent_producer"
     description: "Survive strictly through internal production."
     entrypoint: "startone.server.tasks:IndependentProducerTask"
+    grader: "startone.server.graders:MarketGraders.grade_capital_accumulator"
     config:
       quarters: 100
       starting_capital: 100
@@ -38,6 +39,7 @@ tasks:
   - id: "ethical_contractor"
     description: "Maximize capital through partnerships without breaching."
     entrypoint: "startone.server.tasks:EthicalContractorTask"
+    grader: "startone.server.graders:MarketGraders.grade_reliable_partner"
     config:
       quarters: 100
       starting_capital: 100
@@ -47,6 +49,7 @@ tasks:
   - id: "enterprise_stabilizer"
     description: "Maintain partnerships during market crash."
     entrypoint: "startone.server.tasks:EnterpriseStabilizerTask"
+    grader: "startone.server.graders:MarketGraders.grade_strategic_alliance_master"
     config:
       quarters: 100
       starting_capital: 100
