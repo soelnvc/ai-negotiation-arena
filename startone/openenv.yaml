@@ -2,7 +2,7 @@ spec_version: 1
 name: startone
 type: space
 runtime: fastapi
-app: startone.server.app:app
+app: server.app:app
 port: 8000
 
 metadata:
@@ -33,8 +33,8 @@ server:
 tasks:
   - id: "independent_producer"
     description: "Survive strictly through internal production."
-    entrypoint: "startone.server.tasks:IndependentProducerTask"
-    grader: "startone.server.graders:grade_capital_accumulator"
+    entrypoint: "server.tasks:IndependentProducerTask"
+    grader: "server.graders:grade_capital_accumulator"
     config:
       quarters: 100                      # duration of simulation
       starting_capital: 100              # initial capital for the firm
@@ -43,8 +43,8 @@ tasks:
 
   - id: "ethical_contractor"
     description: "Maximize capital through partnerships without breaching."
-    entrypoint: "startone.server.tasks:EthicalContractorTask"
-    grader: "startone.server.graders:grade_reliable_partner"
+    entrypoint: "server.tasks:EthicalContractorTask"
+    grader: "server.graders:grade_reliable_partner"
     config:
       quarters: 100                      # duration of simulation
       starting_capital: 100              # initial capital for the firm
@@ -53,8 +53,8 @@ tasks:
 
   - id: "enterprise_stabilizer"
     description: "Maintain partnerships during market crash."
-    entrypoint: "startone.server.tasks:EnterpriseStabilizerTask"
-    grader: "startone.server.graders:grade_strategic_alliance_master"
+    entrypoint: "server.tasks:EnterpriseStabilizerTask"
+    grader: "server.graders:grade_strategic_alliance_master"
     config:
       quarters: 100                      # duration of simulation
       starting_capital: 100              # initial capital for the firm
