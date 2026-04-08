@@ -19,6 +19,7 @@ Compatibility:
 """
 
 from dataclasses import dataclass
+import inspect
 from typing import Any, Callable, Type
 
 try:
@@ -51,6 +52,41 @@ if _task_definition_type is None:
 else:
     TaskDefinition = _task_definition_type
 
+
+def _make_task_definition(
+    task_id: str,
+    name: str,
+    description: str,
+    environment_class: Type[Any],
+    grader_callable: Callable[..., float],
+    max_steps: int,
+) -> Any:
+    """Build a TaskDefinition across OpenEnv API variants.
+
+    Some OpenEnv versions expect `grader`, others expect `grader_callable`.
+    This adapter ensures the grader is always wired, avoiding false
+    "not enough tasks with graders" validation failures.
+    """
+    try:
+        params = inspect.signature(TaskDefinition).parameters
+    except (TypeError, ValueError):
+        params = {}
+
+    payload: dict[str, Any] = {
+        "task_id": task_id,
+        "name": name,
+        "description": description,
+        "environment_class": environment_class,
+        "max_steps": max_steps,
+    }
+
+    if "grader" in params:
+        payload["grader"] = grader_callable
+    else:
+        payload["grader_callable"] = grader_callable
+
+    return TaskDefinition(**payload)
+
 from .startone_environment import MarketEnvironment
 from .graders import MarketGraders
 
@@ -58,7 +94,7 @@ from .graders import MarketGraders
 # TASK 1: EASY - Capital Accumulator
 # ---------------------------------------------------------
 # Measures basic survival and capital accumulation capability.
-task_capital_accumulator = TaskDefinition(
+task_capital_accumulator = _make_task_definition(
     task_id="independent_producer",
     name="Independent Producer",
     description=(
@@ -74,7 +110,7 @@ task_capital_accumulator = TaskDefinition(
 # TASK 2: MEDIUM - Reliable Partner
 # ---------------------------------------------------------
 # Measures cooperation under temptation to breach contracts.
-task_reliable_partner = TaskDefinition(
+task_reliable_partner = _make_task_definition(
     task_id="ethical_contractor",
     name="Ethical Contractor",
     description=(
@@ -90,7 +126,7 @@ task_reliable_partner = TaskDefinition(
 # TASK 3: HARD - Strategic Alliance Master
 # ---------------------------------------------------------
 # Measures advanced partnership maintenance and strategic adaptation.
-task_strategic_alliance_master = TaskDefinition(
+task_strategic_alliance_master = _make_task_definition(
     task_id="enterprise_stabilizer",
     name="Enterprise Stabilizer",
     description=(
