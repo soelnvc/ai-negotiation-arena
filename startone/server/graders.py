@@ -172,7 +172,7 @@ class MarketGraders:
             -1.0,
         )
         if initial_capital < 0:
-            return 0.0
+            return MarketGraders._clamp01_strict(0.0)
 
         current_capital = float(state.firm_capital.get(actor_id, 0))
         capital_gain = max(0.0, current_capital - initial_capital)
@@ -230,7 +230,7 @@ class MarketGraders:
         )
 
         if contracts_breached > 0:
-            return MarketGraders._clamp01_strict(0.0)
+            return MarketGraders._clamp01_strict(0.01)
 
         return MarketGraders._clamp01_strict(
             successful_contracts / MarketGraders.TARGET_SUCCESSFUL_TRADES
@@ -343,3 +343,30 @@ class ArenaGraders(MarketGraders):
     to MarketGraders. Direct subclass with no overrides.
     """
     pass
+
+
+# ============================================================
+# OpenEnv-compatible wrapper functions (explicit module exports)
+# ============================================================
+# These are module-level callables that OpenEnv can import and invoke.
+# They ensure proper telemetry handling and score normalization.
+
+def grade_capital_accumulator(state: MarketState, actor_id: str, telemetry: Optional[Mapping[str, float]] = None) -> float:
+    """OpenEnv wrapper: Grade capital accumulation task."""
+    if telemetry is None:
+        telemetry = {}
+    return MarketGraders.grade_capital_accumulator(state, actor_id, telemetry)
+
+
+def grade_reliable_partner(state: MarketState, actor_id: str, telemetry: Optional[Mapping[str, float]] = None) -> float:
+    """OpenEnv wrapper: Grade reliable partnership task."""
+    if telemetry is None:
+        telemetry = {}
+    return MarketGraders.grade_reliable_partner(state, actor_id, telemetry)
+
+
+def grade_strategic_alliance_master(state: MarketState, actor_id: str, telemetry: Optional[Mapping[str, float]] = None) -> float:
+    """OpenEnv wrapper: Grade strategic alliance task."""
+    if telemetry is None:
+        telemetry = {}
+    return MarketGraders.grade_strategic_alliance_master(state, actor_id, telemetry)
