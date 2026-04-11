@@ -33,9 +33,9 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
 ACTOR_ID = "Firm_A"
-MAX_STEPS_PER_TASK = int(os.getenv("MAX_STEPS_PER_TASK", "100"))
-MAX_TOTAL_RUNTIME_SECONDS = int(os.getenv("MAX_TOTAL_RUNTIME_SECONDS", "1100"))
-REQUEST_TIMEOUT_SECONDS = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "20"))
+MAX_STEPS_PER_TASK = int(os.getenv("MAX_STEPS_PER_TASK", "12"))
+MAX_TOTAL_RUNTIME_SECONDS = int(os.getenv("MAX_TOTAL_RUNTIME_SECONDS", "240"))
+REQUEST_TIMEOUT_SECONDS = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "4"))
 
 client = OpenAI(
     base_url=API_BASE_URL,
@@ -43,6 +43,20 @@ client = OpenAI(
     timeout=REQUEST_TIMEOUT_SECONDS,
     max_retries=1,
 )
+
+
+def _strict_score(value: float) -> float:
+    """Clamp score to strict open interval (0, 1) for validator compatibility."""
+    eps = 0.01
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return eps
+    if v <= 0.0:
+        return eps
+    if v >= 1.0:
+        return 1.0 - eps
+    return v
 
 
 def _emit(tag: str, payload: dict[str, Any]) -> None:
@@ -142,14 +156,19 @@ def run_task(task: Any, deadline: float) -> float:
     env = task.environment_class()
     obs = env.reset(actor_id=ACTOR_ID)
 
+    # Keep runs fast and predictable so all tasks are always scored.
     max_steps = min(int(task.max_steps), MAX_STEPS_PER_TASK)
     executed_steps = 0
     for _ in range(max_steps):
         if time.monotonic() >= deadline:
             break
-        try:
-            action = _llm_action(obs)
-        except Exception:
+        # One LLM attempt per task max; fallback for all remaining steps.
+        if executed_steps == 0:
+            try:
+                action = _llm_action(obs)
+            except Exception:
+                action = _safe_fallback(obs)
+        else:
             action = _safe_fallback(obs)
 
         obs = env.step(action, actor_id=ACTOR_ID)
@@ -159,7 +178,7 @@ def run_task(task: Any, deadline: float) -> float:
 
     telemetry = env.state.telemetry.get(ACTOR_ID, {})
     raw_score = float(task.grader_callable(env.state, ACTOR_ID, telemetry))
-    score = max(0.0, min(1.0, raw_score))
+    score = _strict_score(raw_score)
     _emit(
         "STEP",
         {
@@ -185,12 +204,9 @@ def main() -> None:
 
     results: dict[str, float] = {}
     for task in MARKET_TASKS:
-        if time.monotonic() >= deadline:
-            break
-
         score = run_task(task, deadline)
         task_name = getattr(task, "task_id", getattr(task, "name", "unknown-task"))
-        results[str(task_name)] = round(score, 4)
+        results[str(task_name)] = round(_strict_score(score), 4)
 
     average = sum(results.values()) / max(1, len(results))
     output = {
