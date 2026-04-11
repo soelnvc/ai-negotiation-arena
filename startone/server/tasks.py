@@ -19,7 +19,6 @@ Compatibility:
 """
 
 from dataclasses import dataclass
-import inspect
 from typing import Any, Callable, Type
 
 try:
@@ -67,11 +66,6 @@ def _make_task_definition(
     This adapter ensures the grader is always wired, avoiding false
     "not enough tasks with graders" validation failures.
     """
-    try:
-        params = inspect.signature(TaskDefinition).parameters
-    except (TypeError, ValueError):
-        params = {}
-
     payload: dict[str, Any] = {
         "task_id": task_id,
         "name": name,
@@ -80,12 +74,21 @@ def _make_task_definition(
         "max_steps": max_steps,
     }
 
-    if "grader" in params:
-        payload["grader"] = grader_callable
-    else:
-        payload["grader_callable"] = grader_callable
+    # Prefer `grader` first (some validators check this explicitly), then fallback.
+    try:
+        return TaskDefinition(**{**payload, "grader": grader_callable})
+    except TypeError:
+        pass
 
-    return TaskDefinition(**payload)
+    try:
+        return TaskDefinition(**{**payload, "grader_callable": grader_callable})
+    except TypeError:
+        pass
+
+    # Last resort: try both for permissive constructors that accept **kwargs.
+    return TaskDefinition(
+        **{**payload, "grader": grader_callable, "grader_callable": grader_callable}
+    )
 
 from .startone_environment import MarketEnvironment
 from .graders import MarketGraders

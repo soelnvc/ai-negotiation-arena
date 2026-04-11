@@ -177,7 +177,11 @@ def run_task(task: Any, deadline: float) -> float:
             break
 
     telemetry = env.state.telemetry.get(ACTOR_ID, {})
-    raw_score = float(task.grader_callable(env.state, ACTOR_ID, telemetry))
+    grader_fn = getattr(task, "grader", None) or getattr(task, "grader_callable", None)
+    if grader_fn is None:
+        raw_score = 0.01
+    else:
+        raw_score = float(grader_fn(env.state, ACTOR_ID, telemetry))
     score = _strict_score(raw_score)
     _emit(
         "STEP",

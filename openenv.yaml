@@ -30,6 +30,8 @@ tasks:
     description: "Survive strictly through internal production."
     entrypoint: "server.tasks:IndependentProducerTask"
     grader: "server.graders:grade_capital_accumulator"
+    graders:
+      - "server.graders:grade_capital_accumulator"
     config:
       quarters: 100
       starting_capital: 100
@@ -40,6 +42,8 @@ tasks:
     description: "Maximize capital through partnerships without breaching."
     entrypoint: "server.tasks:EthicalContractorTask"
     grader: "server.graders:grade_reliable_partner"
+    graders:
+      - "server.graders:grade_reliable_partner"
     config:
       quarters: 100
       starting_capital: 100
@@ -50,6 +54,8 @@ tasks:
     description: "Maintain partnerships during market crash."
     entrypoint: "server.tasks:EnterpriseStabilizerTask"
     grader: "server.graders:grade_strategic_alliance_master"
+    graders:
+      - "server.graders:grade_strategic_alliance_master"
     config:
       quarters: 100
       starting_capital: 100
