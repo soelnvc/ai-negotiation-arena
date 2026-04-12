@@ -94,12 +94,10 @@ class MarketGraders:
         EPSILON = 0.01
         if value is None or math.isnan(value) or math.isinf(value):
             return EPSILON
-        clamped = max(0.0, min(1.0, value))
-        if clamped <= 0.0:
-            return EPSILON
-        if clamped >= 1.0:
-            return 1.0 - EPSILON
-        return clamped
+        # Keep scores away from boundaries so any downstream rounding
+        # still remains strictly inside (0, 1).
+        clamped = max(0.0, min(1.0, float(value)))
+        return max(EPSILON, min(1.0 - EPSILON, clamped))
 
     @staticmethod
     def _telemetry_value(

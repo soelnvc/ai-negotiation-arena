@@ -52,11 +52,7 @@ def _strict_score(value: float) -> float:
         v = float(value)
     except (TypeError, ValueError):
         return eps
-    if v <= 0.0:
-        return eps
-    if v >= 1.0:
-        return 1.0 - eps
-    return v
+    return max(eps, min(1.0 - eps, v))
 
 
 def _emit(tag: str, payload: dict[str, Any]) -> None:
