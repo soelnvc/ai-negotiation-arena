@@ -34,7 +34,7 @@ _task_definition_type = (
 )
 
 if _task_definition_type is None:
-    @dataclass(frozen=True)
+    @dataclass
     class TaskDefinition:
         """Compatibility fallback when OpenEnv doesn't export TaskDefinition.
         
@@ -46,8 +46,14 @@ if _task_definition_type is None:
         name: str  # Human-readable task name (e.g., "Resource Scavenger")
         description: str  # Full task objective and complexity statement
         environment_class: Type[Any]  # Environment class to instantiate for this task
-        grader_callable: Callable[..., float]  # Grader function returning [0.0, 1.0] score
+        grader: Callable[..., float]  # Canonical grader callable
         max_steps: int  # Episode termination threshold (max turns per episode)
+        grader_callable: Callable[..., float] | None = None  # Compatibility alias
+
+        def __post_init__(self) -> None:
+            # Keep both attribute names populated for validator/runtime compatibility.
+            if self.grader_callable is None:
+                self.grader_callable = self.grader
 else:
     TaskDefinition = _task_definition_type
 
@@ -74,21 +80,35 @@ def _make_task_definition(
         "max_steps": max_steps,
     }
 
-    # Prefer `grader` first (some validators check this explicitly), then fallback.
+    # Try both forms; some OpenEnv variants accept one or the other.
+    task_obj = None
+    for candidate in (
+        {**payload, "grader": grader_callable, "grader_callable": grader_callable},
+        {**payload, "grader": grader_callable},
+        {**payload, "grader_callable": grader_callable},
+    ):
+        try:
+            task_obj = TaskDefinition(**candidate)
+            break
+        except TypeError:
+            continue
+
+    if task_obj is None:
+        raise TypeError("Unable to construct TaskDefinition with grader fields")
+
+    # Backfill missing alias attributes when object allows mutation.
     try:
-        return TaskDefinition(**{**payload, "grader": grader_callable})
-    except TypeError:
+        if not hasattr(task_obj, "grader") and hasattr(task_obj, "grader_callable"):
+            setattr(task_obj, "grader", getattr(task_obj, "grader_callable"))
+    except Exception:
+        pass
+    try:
+        if not hasattr(task_obj, "grader_callable") and hasattr(task_obj, "grader"):
+            setattr(task_obj, "grader_callable", getattr(task_obj, "grader"))
+    except Exception:
         pass
 
-    try:
-        return TaskDefinition(**{**payload, "grader_callable": grader_callable})
-    except TypeError:
-        pass
-
-    # Last resort: try both for permissive constructors that accept **kwargs.
-    return TaskDefinition(
-        **{**payload, "grader": grader_callable, "grader_callable": grader_callable}
-    )
+    return task_obj
 
 from .startone_environment import MarketEnvironment
 from .graders import MarketGraders
